@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PayAgent Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4">
+    <div class="max-w-5xl mx-auto">
+
+        <header class="mb-8">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="text-3xl">🤖</span>
+                <h1 class="text-2xl font-bold">PayAgent Dashboard</h1>
+                <span class="px-2 py-1 rounded-full text-xs bg-purple-500/20 text-purple-400">Devnet</span>
+            </div>
+            <p class="text-slate-400 text-sm">
+                Monitoramento em tempo real de pagamentos autônomos entre agentes de IA na Solana.
+            </p>
+        </header>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Transações</p>
+                <p id="total-tx" class="text-2xl font-bold mt-1">—</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Enviado</p>
+                <p id="total-sent" class="text-2xl font-bold mt-1 text-red-400">—</p>
+                <p class="text-xs text-slate-500">SOL</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Recebido</p>
+                <p id="total-received" class="text-2xl font-bold mt-1 text-green-400">—</p>
+                <p class="text-xs text-slate-500">SOL</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+                <p class="text-xs text-slate-400">Saldo atual</p>
+                <p id="balance" class="text-2xl font-bold mt-1 text-blue-400">—</p>
+                <p class="text-xs text-slate-500">SOL</p>
+            </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden mb-6">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center">
+                <h2 class="font-semibold">Transações Recentes</h2>
+                <span id="status" class="text-xs text-slate-400">carregando...</span>
+            </div>
+            <div id="list" class="divide-y divide-slate-800">
+                <div class="p-6 text-center text-slate-400 text-sm">Carregando transações...</div>
+            </div>
+        </div>
+
+        <footer class="text-center">
+            <p class="text-xs text-slate-500 mb-1">Carteira monitorada:</p>
+            <p class="font-mono text-xs text-slate-400 break-all" id="wallet">—</p>
+            <p class="text-xs text-slate-600 mt-4">
+                Construído para o <a href="https://hackathon.superteam.com.br/" class="text-purple-400 hover:underline">Superteam Hackathon 2026</a>
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        // ⚙️ CONFIGURAÇÃO — troque pelo endereço da sua carteira do PC
+        const AGENT_WALLET = 'AzaCWKcMhQdcPHPBEveTaEWuJB4DP7ofWUKkBgxSJU3c';
+        const RPC = 'https://api.devnet.solana.com';
+
+        const { Connection, PublicKey, LAMPORTS_PER_SOL } = solanaWeb3;
+        const connection = new Connection(RPC, 'confirmed');
+
+        const shorten = (s) => s.slice(0, 6) + '…' + s.slice(-6);
+
+        function renderRow(tx) {
+            const isSent = tx.direction === 'enviado';
+            const badgeColor = isSent
+                ? 'bg-red-500/20 text-red-400'
+                : 'bg-green-500/20 text-green-400';
+            const arrow = isSent ? '↑' : '↓';
+            const date = tx.timestamp
+                ? new Date(tx.timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                : '—';
+
+            return `
+                <div class="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 hover:bg-slate-800/30">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-mono text-xs text-slate-300 truncate">${shorten(tx.signature)}</div>
+                        <div class="text-xs text-slate-500 mt-1">${date}</div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-semibold">${arrow} ${tx.amount.toFixed(5)} SOL</span>
+                        <span class="px-2 py-1 rounded-full text-xs ${badgeColor}">${tx.direction}</span>
+                        <a href="${tx.explorerUrl}" target="_blank" rel="noopener"
+                           class="text-purple-400 hover:text-purple-300 text-xs underline">Ver →</a>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function load() {
+            const statusEl = document.getElementById('status');
+            const listEl = document.getElementById('list');
+            statusEl.textContent = 'atualizando...';
+
+            try {
+                const pubkey = new PublicKey(AGENT_WALLET);
+                document.getElementById('wallet').textContent = AGENT_WALLET;
+
+                const balance = await connection.getBalance(pubkey);
+                document.getElementById('balance').textContent = (balance / LAMPORTS_PER_SOL).toFixed(4);
+
+                const sigs = await connection.getSignaturesForAddress(pubkey, { limit: 15 });
+
+                const txs = await Promise.all(sigs.map(async (s) => {
+                    const tx = await connection.getTransaction(s.signature, {
+                        maxSupportedTransactionVersion: 0,
+                        commitment: 'confirmed'
+                    });
+                    let amount = 0, direction = 'unknown';
+                    if (tx && tx.meta) {
+                        const idx = tx.transaction.message.accountKeys.findIndex(
+                            k => k.toString() === AGENT_WALLET
+                        );
+                        if (idx >= 0) {
+                            const diff = tx.meta.postBalances[idx] - tx.meta.preBalances[idx];
+                            amount = Math.abs(diff) / LAMPORTS_PER_SOL;
+                            direction = diff < 0 ? 'enviado' : 'recebido';
+                        }
+                    }
+                    return {
+                        signature: s.signature,
+                        timestamp: s.blockTime ? s.blockTime * 1000 : null,
+                        amount,
+                        direction,
+                        explorerUrl: `https://explorer.solana.com/tx/${s.signature}?cluster=devnet`
+                    };
+                }));
+
+                const sent = txs.filter(t => t.direction === 'enviado').reduce((a, t) => a + t.amount, 0);
+                const received = txs.filter(t => t.direction === 'recebido').reduce((a, t) => a + t.amount, 0);
+
+                document.getElementById('total-tx').textContent = txs.length;
+                document.getElementById('total-sent').textContent = sent.toFixed(4);
+                document.getElementById('total-received').textContent = received.toFixed(4);
+
+                listEl.innerHTML = txs.length
+                    ? txs.map(renderRow).join('')
+                    : '<div class="p-6 text-center text-slate-400 text-sm">Nenhuma transação encontrada.</div>';
+
+                statusEl.textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR');
+            } catch (e) {
+                console.error(e);
+                statusEl.textContent = 'erro';
+                listEl.innerHTML = `<div class="p-6 text-center text-red-400 text-sm">Falha: ${e.message}</div>`;
+            }
+        }
+
+        load();
+        setInterval(load, 15000);
+    </script>
+</body>
+</html>
