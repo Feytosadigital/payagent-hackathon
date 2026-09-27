@@ -1,0 +1,30 @@
+# Dependências
+node_modules/
+__pycache__/
+*.pyc
+
+# Variáveis de ambiente (nunca commitar)
+.env
+.env.local
+.env.*.local
+
+# Chaves privadas (NUNCA commitar)
+payer_wallet.json
+receiver_wallet.json
+*.keypair.json
+keypair.json
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
+
+# Build / Next.js
+.next/
+out/
+build/
+dist/
